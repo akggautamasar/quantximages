@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 export default function App() {
   // State variables for managing the application
   const [media, setMedia] = useState([]); // Stores the fetched media data (photos or videos)
-  const [query, setQuery] = useState('nature'); // Current search query, default to 'nature'
+  const [searchTerm, setSearchTerm] = useState('nature'); // What the user is currently typing in the input field
+  const [currentSearchQuery, setCurrentSearchQuery] = useState('nature'); // The query that actually triggers the API fetch
   const [loading, setLoading] = useState(true); // Loading state for API calls
   const [error, setError] = useState(null); // Error message if API call fails
   const [currentPage, setCurrentPage] = useState(1); // Current page for pagination
@@ -16,8 +17,6 @@ export default function App() {
   const canvasRef = useRef(null);
 
   // Pixabay API Key and URLs
-  // IMPORTANT: Replace 'YOUR_PIXABAY_API_KEY' with your actual Pixabay API key.
-  // Get your key from: https://pixabay.com/api/docs/
   const PIXABAY_API_KEY = '49507277-8909a8996bad61e590d8d5a88'; // Your Pixabay API Key
   const PIXABAY_PHOTO_API_URL = `https://pixabay.com/api/?key=${PIXABAY_API_KEY}`;
   const PIXABAY_VIDEO_API_URL = `https://pixabay.com/api/videos/?key=${PIXABAY_API_KEY}`;
@@ -32,13 +31,14 @@ export default function App() {
 
     try {
       let response;
+      const apiQuery = encodeURIComponent(currentSearchQuery); // Use the committed search query for API call
       if (mediaType === 'photo') {
         response = await fetch(
-          `${PIXABAY_PHOTO_API_URL}&q=${encodeURIComponent(query)}&image_type=photo&orientation=vertical&safesearch=true&page=${currentPage}&per_page=${perPage}`
+          `${PIXABAY_PHOTO_API_URL}&q=${apiQuery}&image_type=photo&orientation=vertical&safesearch=true&page=${currentPage}&per_page=${perPage}`
         );
       } else { // mediaType === 'video'
         response = await fetch(
-          `${PIXABAY_VIDEO_API_URL}&q=${encodeURIComponent(query)}&video_type=all&safesearch=true&page=${currentPage}&per_page=${perPage}`
+          `${PIXABAY_VIDEO_API_URL}&q=${apiQuery}&video_type=all&safesearch=true&page=${currentPage}&per_page=${perPage}`
         );
       }
 
@@ -65,27 +65,28 @@ export default function App() {
     }
   };
 
-  // useEffect hook to fetch media whenever query, currentPage, or mediaType changes
+  // useEffect hook to fetch media whenever currentSearchQuery, currentPage, or mediaType changes
   useEffect(() => {
     fetchMedia();
-  }, [query, currentPage, perPage, mediaType]); // Dependencies for useEffect
+  }, [currentSearchQuery, currentPage, perPage, mediaType]); // Dependencies for useEffect
 
   /**
-   * Handles changes in the search input field.
+   * Handles changes in the search input field (updates searchTerm).
    * @param {Object} e - The event object from the input field.
    */
-  const handleSearchChange = (e) => {
-    setQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on new search
+  const handleSearchInputChange = (e) => {
+    setSearchTerm(e.target.value);
   };
 
   /**
    * Handles search submission (e.g., pressing Enter).
+   * Updates currentSearchQuery and resets page to 1.
    * @param {Object} e - The event object from the form.
    */
   const handleSearchSubmit = (e) => {
     e.preventDefault(); // Prevent default form submission behavior (page reload)
-    // fetchMedia will be called by useEffect due to query change
+    setCurrentSearchQuery(searchTerm); // This will trigger the useEffect to fetch new data
+    setCurrentPage(1); // Reset to first page on new search
   };
 
   /**
@@ -192,7 +193,7 @@ export default function App() {
       {/* Media Type Selection */}
       <div className="flex justify-center mb-8 bg-gray-800 rounded-full p-2 shadow-inner">
         <button
-          onClick={() => { setMediaType('photo'); setCurrentPage(1); }} // Reset page on type change
+          onClick={() => { setMediaType('photo'); setCurrentPage(1); setCurrentSearchQuery(searchTerm); }} // Trigger fetch on type change
           className={`px-6 py-3 rounded-full text-lg font-semibold transition-colors duration-300 ${
             mediaType === 'photo'
               ? 'bg-indigo-600 text-white shadow-md'
@@ -202,7 +203,7 @@ export default function App() {
           Photos
         </button>
         <button
-          onClick={() => { setMediaType('video'); setCurrentPage(1); }} // Reset page on type change
+          onClick={() => { setMediaType('video'); setCurrentPage(1); setCurrentSearchQuery(searchTerm); }} // Trigger fetch on type change
           className={`ml-4 px-6 py-3 rounded-full text-lg font-semibold transition-colors duration-300 ${
             mediaType === 'video'
               ? 'bg-indigo-600 text-white shadow-md'
@@ -218,8 +219,8 @@ export default function App() {
         <div className="relative">
           <input
             type="text"
-            value={query}
-            onChange={handleSearchChange}
+            value={searchTerm} // Binds input to searchTerm
+            onChange={handleSearchInputChange} // Updates searchTerm on change
             placeholder={`Search for ${mediaType === 'photo' ? 'images' : 'videos'}...`}
             className="w-full p-4 pl-12 pr-4 rounded-xl bg-gray-800 border border-gray-700 focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 text-white placeholder-gray-400 shadow-lg"
           />
@@ -278,81 +279,98 @@ export default function App() {
       )}
 
       {!loading && !error && media.length === 0 && (
-        <div className="text-gray-400 text-xl">No {mediaType}s found for "{query}". Try a different search!</div>
+        <div className="text-gray-400 text-xl">No {mediaType}s found for "{currentSearchQuery}". Try a different search!</div>
       )}
 
       {/* Media Grid */}
       {!loading && !error && media.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full max-w-6xl mt-4">
-          {media.map((item) => (
-            <div
-              key={item.id}
-              className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg transform transition-transform duration-300 hover:scale-105 hover:shadow-2xl group"
-            >
-              {mediaType === 'photo' ? (
-                <img
-                  src={item.webformatURL} // Use webformatURL for display in grid
-                  alt={item.tags}
-                  className="w-full h-64 object-cover object-center rounded-t-xl"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = `https://placehold.co/600x400/374151/D1D5DB?text=Image+Load+Error`;
-                  }}
-                />
-              ) : (
-                <video
-                  src={item.videos?.small?.url || item.videos?.tiny?.url} // Use smaller video for grid preview
-                  poster={item.videos?.picture_id ? `https://i.vimeocdn.com/video/${item.videos.picture_id}_640x360.jpg` : `https://placehold.co/600x400/374151/D1D5DB?text=Video+Thumbnail`}
-                  controls={false} // No controls for preview
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-64 object-cover object-center rounded-t-xl"
-                  onMouseEnter={e => e.target.play()} // Autoplay on hover
-                  onMouseLeave={e => e.target.pause()} // Pause on mouse leave
-                  onError={(e) => {
-                    console.error('Video preview load error:', e);
-                    e.target.src = '';
-                    e.target.poster = `https://placehold.co/600x400/374151/D1D5DB?text=Video+Load+Error`;
-                  }}
-                >
-                  Your browser does not support the video tag.
-                </video>
-              )}
+          {media.map((item) => {
+            // Construct video poster URL for logging and display
+            const videoPosterUrl = item.videos?.picture_id
+              ? `https://i.vimeocdn.com/video/${item.videos.picture_id}_640x360.jpg`
+              : `https://placehold.co/600x400/374151/D1D5DB?text=Video+Thumbnail`;
 
-              {/* Overlay for details and download button */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
-                <h3 className="text-lg font-semibold text-white mb-2 truncate">
-                  {item.tags?.split(',')[0] || item.tags || 'Untitled'}
-                </h3>
-                <p className="text-sm text-gray-300 mb-4">
-                  By: {item.user}
-                </p>
-                <button
-                  onClick={() => handleDownloadClick(item)}
-                  className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="mr-2"
+            if (mediaType === 'video') {
+              console.log(`Video ID: ${item.id}, Constructed Poster URL: ${videoPosterUrl}`);
+            }
+
+            return (
+              <div
+                key={item.id}
+                className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg transform transition-transform duration-300 hover:scale-105 hover:shadow-2xl group"
+              >
+                {mediaType === 'photo' ? (
+                  <img
+                    src={item.webformatURL} // Use webformatURL for display in grid
+                    alt={item.tags}
+                    className="w-full h-64 object-cover object-center rounded-t-xl"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = `https://placehold.co/600x400/374151/D1D5DB?text=Image+Load+Error`;
+                    }}
+                  />
+                ) : (
+                  <video
+                    src={item.videos?.small?.url || item.videos?.tiny?.url} // Use smaller video for grid preview
+                    poster={videoPosterUrl}
+                    controls={false} // No controls for preview
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-64 object-cover object-center rounded-t-xl"
+                    onMouseEnter={e => {
+                      if (e.target.readyState >= 2) { // Ensure video has enough data to play
+                        e.target.play().catch(error => console.error("Video autoplay failed:", error));
+                      }
+                    }}
+                    onMouseLeave={e => e.target.pause()}
+                    onError={(e) => {
+                      console.error('Video element encountered an error for ID:', item.id, 'Source:', e.target.src, 'Poster attempted:', videoPosterUrl, e);
+                      // Fallback to a clear error poster
+                      e.target.poster = `https://placehold.co/600x400/FF0000/FFFFFF?text=Video+Error`;
+                      // Optionally, remove src to prevent infinite loading attempts
+                      e.target.src = '';
+                    }}
                   >
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                  </svg>
-                  Download {mediaType === 'photo' ? 'Photo' : 'Video'}
-                </button>
+                    Your browser does not support the video tag.
+                  </video>
+                )}
+
+                {/* Overlay for details and download button */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                  <h3 className="text-lg font-semibold text-white mb-2 truncate">
+                    {item.tags?.split(',')[0] || item.tags || 'Untitled'}
+                  </h3>
+                  <p className="text-sm text-gray-300 mb-4">
+                    By: {item.user}
+                  </p>
+                  <button
+                    onClick={() => handleDownloadClick(item)}
+                    className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="mr-2"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download {mediaType === 'photo' ? 'Photo' : 'Video'}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
